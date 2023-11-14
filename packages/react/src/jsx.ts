@@ -42,7 +42,15 @@ function hasValidRef(config: any) {
 	return config.ref !== undefined;
 }
 
-const jsx = (type: ElementType, config: any) => {
+export function isValidElement(object: any) {
+	return (
+		typeof object === 'object' &&
+		object !== null &&
+		object.$$typeof === REACT_ELEMENT_TYPE
+	);
+}
+
+export const jsx = (type: ElementType, config: any) => {
 	let key: Key = null;
 	const props: any = {};
 	let ref: Ref = null;

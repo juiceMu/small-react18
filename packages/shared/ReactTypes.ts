@@ -7,7 +7,7 @@ export type Props = {
 };
 
 export interface ReactElementType {
-	$$typeof: symbol;
+	$$typeof: symbol | number;
 	type: ElementType;
 	key: Key;
 	props: Props;
