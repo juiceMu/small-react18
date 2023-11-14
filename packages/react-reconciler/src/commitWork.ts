@@ -83,7 +83,7 @@ const commitMutationEffectsOnFiber = (finishedWork: FiberNode) => {
 function commitDeletion(childToDelete: FiberNode) {
 	let rootHostNode: FiberNode | null = null;
 	// 递归子树
-	// 	对于FC，需要处理useEffect unmout执行、解绑ref
+	// 对于FC，需要处理useEffect unmout执行、解绑ref
 	// 对于HostComponent，需要解绑ref
 	// 对于子树的根HostComponent，需要移除DOM
 	commitNestedComponent(childToDelete, (unmountFiber) => {
@@ -121,7 +121,7 @@ function commitDeletion(childToDelete: FiberNode) {
 }
 
 /**
- * 进行递归树级fiber结构操作
+ * 进行递归嵌套树级fiber结构操作
  * @param root fiber 递归开始的起点
  * @param onCommitUnmount 针对每个fiber要执行的函数
  */
