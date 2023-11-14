@@ -5,13 +5,21 @@ import {
 	createTextInstance
 } from 'hostConfig';
 import { FiberNode } from './fiber';
-import { NoFlags } from './fiberFlags';
+import { NoFlags, Update } from './fiberFlags';
 import {
 	HostRoot,
 	HostText,
 	HostComponent,
 	FunctionComponent
 } from './workTags';
+
+/**
+ * 对fiber进行update标记
+ * @param fiber
+ */
+function markUpdate(fiber: FiberNode) {
+	fiber.flags |= Update;
+}
 
 // 递归中的归阶段
 export const completeWork = (wip: FiberNode) => {
@@ -37,6 +45,12 @@ export const completeWork = (wip: FiberNode) => {
 		case HostText:
 			if (current !== null && wip.stateNode) {
 				// update
+				const oldText = current.memoizedProps?.content;
+				const newText = newProps.content;
+				if (oldText !== newText) {
+					// 前后文本内容不同，需要进行更新，打上更新标记
+					markUpdate(wip);
+				}
 			} else {
 				// 1. 构建DOM
 				const instance = createTextInstance(newProps.content);

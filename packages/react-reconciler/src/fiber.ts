@@ -20,6 +20,7 @@ export class FiberNode {
 	flags: Flags;
 	subtreeFlags: Flags;
 	updateQueue: unknown;
+	deletions: FiberNode[] | null;
 
 	constructor(tag: WorkTag, pendingProps: Props, key: Key) {
 		// 下面这些是实例属性
@@ -46,6 +47,7 @@ export class FiberNode {
 		// 副作用
 		this.flags = NoFlags; // 对应操作标记
 		this.subtreeFlags = NoFlags; // 层层叠加的操作标记集合
+		this.deletions = null; // 要被删除的子Fiber合集
 	}
 }
 
@@ -83,6 +85,7 @@ export const createWorkInProgress = (
 		wip.pendingProps = pendingProps;
 		wip.flags = NoFlags;
 		wip.subtreeFlags = NoFlags;
+		wip.deletions = null;
 	}
 	// 复用属性
 	wip.type = current.type;

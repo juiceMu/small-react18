@@ -49,7 +49,7 @@ export const enqueueUpdate = <State>(
 };
 
 /**
- * 进行更新队列 计算状态最新值 消费update
+ * 计算状态最新值 消费update
  * @param baseState 初始状态
  * @param pendingUpdate 需要被消费的update
  * @returns 包含最新状态memoizedState的对象

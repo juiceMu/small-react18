@@ -1,7 +1,11 @@
 import { REACT_ELEMENT_TYPE } from 'shared/ReactSymbols';
-import { ReactElementType } from 'shared/ReactTypes';
-import { createFiberFromElement, FiberNode } from './fiber';
-import { Placement } from './fiberFlags';
+import { Props, ReactElementType } from 'shared/ReactTypes';
+import {
+	createFiberFromElement,
+	createWorkInProgress,
+	FiberNode
+} from './fiber';
+import { ChildDeletion, Placement } from './fiberFlags';
 import { HostText } from './workTags';
 
 /**
@@ -10,6 +14,26 @@ import { HostText } from './workTags';
  * @returns {function} reconcileChildFibers 用于处理子Fiber的函数
  */
 function ChildReconciler(shouldTrackEffects: boolean) {
+	/**
+	 * 删除子fiber
+	 * @param returnFiber 父级Fiber
+	 * @param childToDelete 要删除的Fiber
+	 * @returns
+	 */
+	function deleteChild(returnFiber: FiberNode, childToDelete: FiberNode) {
+		if (!shouldTrackEffects) {
+			return;
+		}
+		// 要被删除的子Fiber集合
+		const deletions = returnFiber.deletions;
+		if (deletions === null) {
+			returnFiber.deletions = [childToDelete];
+			returnFiber.flags |= ChildDeletion;
+		} else {
+			deletions.push(childToDelete);
+		}
+	}
+
 	/**
 	 * 根据element/虚拟dom创建Fiber
 	 * @param returnFiber 父级Fiber
@@ -22,6 +46,38 @@ function ChildReconciler(shouldTrackEffects: boolean) {
 		currentFiber: FiberNode | null,
 		element: ReactElementType
 	) {
+		// 1.比较是否可以复用current fiber：
+		//    a.比较key，如果key不同，不能复用
+		//    b.比较type，如果type不同，不能复用
+		//    c.如果key与type都相同，则可复用
+		// 2.不能复用，则创建新的（同mount流程），可以复用则复用旧的
+		const key = element.key;
+		work: if (currentFiber !== null) {
+			// 证明为更新阶段
+			if (currentFiber.key === key) {
+				// key相同
+				if (element.$$typeof === REACT_ELEMENT_TYPE) {
+					if (currentFiber.type === element.type) {
+						// type相同，则可以复用fiber
+						const existing = useFiber(currentFiber, element.props);
+						existing.return = returnFiber;
+						// 返回复用的Fiber，无需重现创建新Fiber
+						return existing;
+					}
+					// 无法复用，则删除旧Fiber，创建新fiber
+					deleteChild(returnFiber, currentFiber);
+					break work;
+				} else {
+					if (__DEV__) {
+						console.warn('还未实现的react类型', element);
+						break work;
+					}
+				}
+			} else {
+				// 无法复用，则删除旧Fiber，创建新fiber
+				deleteChild(returnFiber, currentFiber);
+			}
+		}
 		const fiber = createFiberFromElement(element);
 		fiber.return = returnFiber;
 		return fiber;
@@ -39,6 +95,16 @@ function ChildReconciler(shouldTrackEffects: boolean) {
 		currentFiber: FiberNode | null,
 		content: string | null
 	) {
+		if (currentFiber !== null) {
+			// 证明在update阶段
+			if (currentFiber.tag === HostText) {
+				// 类型没变，可以复用
+				const existing = useFiber(currentFiber, { content });
+				existing.return = returnFiber;
+				return existing;
+			}
+			deleteChild(returnFiber, currentFiber);
+		}
 		const fiber = new FiberNode(HostText, { content }, null);
 		fiber.return = returnFiber;
 		return fiber;
@@ -93,12 +159,31 @@ function ChildReconciler(shouldTrackEffects: boolean) {
 			);
 		}
 
+		if (currentFiber !== null) {
+			// 兜底删除
+			deleteChild(returnFiber, currentFiber);
+		}
+
 		if (__DEV__) {
 			console.warn('未实现的reconcile类型', newChild);
 		}
 		return null;
 	};
 }
+
+/**
+ * 复用Fiber
+ * @param fiber
+ * @param pendingProps
+ * @returns Fiber
+ */
+function useFiber(fiber: FiberNode, pendingProps: Props): FiberNode {
+	const clone = createWorkInProgress(fiber, pendingProps);
+	clone.index = 0;
+	clone.sibling = null;
+	return clone;
+}
+
 // 更新时使用
 export const reconcileChildFibers = ChildReconciler(true);
 // 初次挂载时使用
