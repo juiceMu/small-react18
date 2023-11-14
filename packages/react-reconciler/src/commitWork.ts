@@ -2,6 +2,8 @@ import {
 	appendChildToContainer,
 	commitUpdate,
 	Container,
+	insertChildToContainer,
+	Instance,
 	removeChild
 } from 'hostConfig';
 import { FiberNode, FiberRootNode } from './fiber';
@@ -49,6 +51,10 @@ export const commitMutationEffects = (finishedWork: FiberNode) => {
 	}
 };
 
+/**
+ * 执行Fiber上标记的操作
+ * @param finishedWork
+ */
 const commitMutationEffectsOnFiber = (finishedWork: FiberNode) => {
 	const flags = finishedWork.flags;
 	if ((flags & Placement) !== NoFlags) {
@@ -162,14 +168,75 @@ const commitPlacement = (finishedWork: FiberNode) => {
 	if (__DEV__) {
 		console.warn('执行Placement操作', finishedWork);
 	}
+	// 获取父级DOM
 	const hostParent = getHostParent(finishedWork);
+	// 获取兄弟DOM
+	const sibling = getHostSibling(finishedWork);
 	if (hostParent !== null) {
-		appendPlacementNodeIntoContainer(finishedWork, hostParent);
+		insertOrAppendPlacementNodeIntoContainer(finishedWork, hostParent, sibling);
 	}
 };
 
 /**
- * 获取父级节点
+ * 获取兄弟DOM
+ * @param fiber
+ * @returns 真实dom元素
+ */
+function getHostSibling(fiber: FiberNode) {
+	// 查找兄弟DOM节点，需要考虑两点：
+	// 1. 可能并不是目标fiber的直接兄弟节点
+	//    比如兄弟fiber为函数组件的fiber，则实际需要找到的目标兄弟DOM节点为兄弟fiber的子Fiber对应的stateNode
+	// 2. 不稳定的DOM节点(即节点自身也存在着移动操作)不能作为「目标兄弟Host节点」
+	let node: FiberNode = fiber;
+	findSibling: while (true) {
+		while (node.sibling === null) {
+			// 没有找到符合条件的兄弟fiber，则向上查找，对父级fiber和父级fiber的兄弟fiber里进行查找
+			// <App/><div/>
+			// function App() {
+			//   return <A/>;
+			// }
+			// 针对A来说，目标兄弟节点则为父级Fiber(APP)的兄弟节点div
+			const parent = node.return;
+			if (
+				parent === null ||
+				parent.tag === HostComponent ||
+				parent.tag === HostRoot
+			) {
+				return null;
+			}
+			node = parent;
+		}
+		node.sibling.return = node.return;
+		node = node.sibling;
+		while (node.tag !== HostText && node.tag !== HostComponent) {
+			// 存在兄弟fiber，则需要考虑如果兄弟fiber中可能不是直接的兄弟节点
+			// <A/><B/>
+			// function B() {
+			//   return <div/>;
+			// }
+			// 针对A来说，目标兄弟节点则是兄弟Fiber(B)的子节点div
+
+			// 向下遍历
+			if ((node.flags & Placement) !== NoFlags) {
+				// 该fiber存在移动操作，不予考虑，直接对下一个fiber进行对比
+				continue findSibling;
+			}
+			if (node.child === null) {
+				continue findSibling;
+			} else {
+				node.child.return = node;
+				node = node.child;
+			}
+		}
+
+		if ((node.flags & Placement) === NoFlags) {
+			return node.stateNode;
+		}
+	}
+}
+
+/**
+ * 获取父级DOM
  * @param fiber
  * @returns 真实dom元素
  */
@@ -192,26 +259,33 @@ function getHostParent(fiber: FiberNode): Container | null {
 }
 
 /**
- * 将DOM元素插入到父级元素中
+ * 将DOM元素插入到父级元素中/插入兄弟节点前
  * @param finishedWork
- * @param hostParent
+ * @param hostParent 父级DOM
+ * @param before 兄弟DOM
  * @returns
  */
-function appendPlacementNodeIntoContainer(
+function insertOrAppendPlacementNodeIntoContainer(
 	finishedWork: FiberNode,
-	hostParent: Container
+	hostParent: Container,
+	before?: Instance
 ) {
 	if (finishedWork.tag === HostComponent || finishedWork.tag === HostText) {
-		appendChildToContainer(hostParent, finishedWork.stateNode);
+		if (before) {
+			// 有兄弟节点，代表需要插入到兄弟节点前
+			insertChildToContainer(finishedWork.stateNode, hostParent, before);
+		} else {
+			appendChildToContainer(hostParent, finishedWork.stateNode);
+		}
 		return;
 	}
 	const child = finishedWork.child;
 	if (child !== null) {
-		appendPlacementNodeIntoContainer(child, hostParent);
+		insertOrAppendPlacementNodeIntoContainer(child, hostParent);
 		let sibling = child.sibling;
 
 		while (sibling !== null) {
-			appendPlacementNodeIntoContainer(sibling, hostParent);
+			insertOrAppendPlacementNodeIntoContainer(sibling, hostParent);
 			sibling = sibling.sibling;
 		}
 	}

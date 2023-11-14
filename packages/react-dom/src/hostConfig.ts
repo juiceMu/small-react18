@@ -71,3 +71,17 @@ export function removeChild(
 ) {
 	container.removeChild(child);
 }
+
+/**
+ * 将子节点DOM插入容器
+ * @param child 要插入的节点
+ * @param container 父节点
+ * @param before 将要插在这个节点之前
+ */
+export function insertChildToContainer(
+	child: Instance,
+	container: Container,
+	before: Instance
+) {
+	container.insertBefore(child, before);
+}
