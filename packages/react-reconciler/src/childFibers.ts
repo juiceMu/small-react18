@@ -445,8 +445,10 @@ function updateFragment(
 ) {
 	let fiber;
 	if (!current || current.tag !== Fragment) {
+		// 需要创建新的fragment
 		fiber = createFiberFromFragment(elements, key);
 	} else {
+		// 前后都是fragment，可复用
 		existingChildren.delete(key);
 		fiber = useFiber(current, elements);
 	}

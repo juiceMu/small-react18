@@ -85,3 +85,14 @@ export function insertChildToContainer(
 ) {
 	container.insertBefore(child, before);
 }
+
+/**
+ * 调度微任务
+ */
+export const scheduleMicroTask =
+	// Window 或 Worker 接口的 queueMicrotask() 方法，将微任务加入队列以在控制返回浏览器的事件循环之前的安全时间执行。
+	typeof queueMicrotask === 'function'
+		? queueMicrotask
+		: typeof Promise === 'function'
+		? (callback: (...args: any) => void) => Promise.resolve(null).then(callback)
+		: setTimeout;

@@ -85,14 +85,21 @@ const commitMutationEffectsOnFiber = (finishedWork: FiberNode) => {
 	}
 };
 
+/**
+ * 记录要被删除的子Fiber
+ * @param childrenToDelete
+ * @param unmountFiber
+ */
 function recordHostChildrenToDelete(
 	childrenToDelete: FiberNode[],
 	unmountFiber: FiberNode
 ) {
-	// 1. 找到第一个root host节点
+	// 1. 找到第一个root host节点（数组中的最后一个节点）
 	const lastOne = childrenToDelete[childrenToDelete.length - 1];
 
+	// 2. 每找到一个 host节点，判断下这个节点是不是 1 找到那个节点的兄弟节点
 	if (!lastOne) {
+		// 证明这是找到的第一个节点
 		childrenToDelete.push(unmountFiber);
 	} else {
 		let node = lastOne.sibling;
@@ -103,15 +110,16 @@ function recordHostChildrenToDelete(
 			node = node.sibling;
 		}
 	}
-
-	// 2. 每找到一个 host节点，判断下这个节点是不是 1 找到那个节点的兄弟节点
 }
 
-// 执行删除操作
+/**
+ * 执行删除操作
+ * @param childToDelete 要被删除的子fiber
+ */
 function commitDeletion(childToDelete: FiberNode) {
 	const rootChildrenToDelete: FiberNode[] = [];
 	// 递归子树
-	// 对于FC，需要处理useEffect unmout执行、解绑ref
+	// 对于FC，需要处理useEffect unmount执行、解绑ref
 	// 对于HostComponent，需要解绑ref
 	// 对于子树的根HostComponent，需要移除DOM
 	commitNestedComponent(childToDelete, (unmountFiber) => {

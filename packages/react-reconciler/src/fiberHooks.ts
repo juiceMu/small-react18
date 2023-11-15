@@ -4,6 +4,7 @@ import { Dispatcher } from 'react/src/currentDispatcher';
 import internals from 'shared/internals';
 import { Action } from 'shared/ReactTypes';
 import { FiberNode } from './fiber';
+import { Lane, NoLane, requestUpdateLane } from './fiberLanes';
 import {
 	createUpdate,
 	createUpdateQueue,
@@ -21,6 +22,8 @@ let workInProgressHook: Hook | null = null;
 // 获取到的从当前正在render的Fiber（currentlyRenderingFiber）对应的currentFiber上存储的hook数据
 // 即workInProgressHook对应的存储在current Fiber上的hook数据
 let currentHook: Hook | null = null;
+// 当前本次更新的优先级
+let renderLane: Lane = NoLane;
 
 const { currentDispatcher } = internals;
 
@@ -30,12 +33,19 @@ interface Hook {
 	next: Hook | null; // 指向下一个hook
 }
 
-export function renderWithHooks(wip: FiberNode) {
+/**
+ * 渲染Hooks
+ * @param wip
+ * @param lane 优先级
+ * @returns 函数组件return的渲染内容
+ */
+export function renderWithHooks(wip: FiberNode, lane: Lane) {
 	// 赋值
 	currentlyRenderingFiber = wip;
 	// 重置 hooks链表
 	wip.memoizedState = null;
-
+	// 设置当前本次更新的优先级
+	renderLane = lane;
 	const current = wip.alternate;
 
 	if (current !== null) {
@@ -55,6 +65,7 @@ export function renderWithHooks(wip: FiberNode) {
 	currentlyRenderingFiber = null;
 	workInProgressHook = null;
 	currentHook = null;
+	renderLane = NoLane;
 	return children;
 }
 
@@ -80,8 +91,13 @@ function updateState<State>(): [State, Dispatch<State>] {
 	// 计算新state的逻辑
 	const queue = hook.updateQueue as UpdateQueue<State>;
 	const pending = queue.shared.pending;
+	queue.shared.pending = null;
 	if (pending !== null) {
-		const { memoizedState } = processUpdateQueue(hook.memoizedState, pending);
+		const { memoizedState } = processUpdateQueue(
+			hook.memoizedState,
+			pending,
+			renderLane
+		);
 		hook.memoizedState = memoizedState;
 	}
 	return [hook.memoizedState, queue.dispatch as Dispatch<State>];
@@ -176,9 +192,11 @@ function dispatchSetState<State>(
 	updateQueue: UpdateQueue<State>,
 	action: Action<State>
 ) {
-	const update = createUpdate(action);
+	// 创建update的优先级
+	const lane = requestUpdateLane();
+	const update = createUpdate(action, lane);
 	enqueueUpdate(updateQueue, update);
-	scheduleUpdateOnFiber(fiber);
+	scheduleUpdateOnFiber(fiber, lane);
 }
 
 /**
