@@ -1,12 +1,13 @@
-import { REACT_ELEMENT_TYPE } from 'shared/ReactSymbols';
-import { Props, ReactElementType } from 'shared/ReactTypes';
+import { REACT_ELEMENT_TYPE, REACT_FRAGMENT_TYPE } from 'shared/ReactSymbols';
+import { Key, Props, ReactElementType } from 'shared/ReactTypes';
 import {
 	createFiberFromElement,
+	createFiberFromFragment,
 	createWorkInProgress,
 	FiberNode
 } from './fiber';
 import { ChildDeletion, Placement } from './fiberFlags';
-import { HostText } from './workTags';
+import { Fragment, HostText } from './workTags';
 
 // 用于保存当前已存在的所有子FiberMap
 type ExistingChildren = Map<string | number, FiberNode>;
@@ -84,8 +85,13 @@ function ChildReconciler(shouldTrackEffects: boolean) {
 				// key相同
 				if (element.$$typeof === REACT_ELEMENT_TYPE) {
 					if (currentFiber.type === element.type) {
+						let props = element.props;
+						if (element.type === REACT_FRAGMENT_TYPE) {
+							// 考虑为Fragment情况
+							props = element.props.children;
+						}
 						// type相同，则可以复用fiber，无需重现创建新Fiber
-						const existing = useFiber(currentFiber, element.props);
+						const existing = useFiber(currentFiber, props);
 						existing.return = returnFiber;
 						// 当前节点可复用，标记剩下的节点删除
 						deleteRemainingChildren(returnFiber, currentFiber.sibling);
@@ -108,7 +114,13 @@ function ChildReconciler(shouldTrackEffects: boolean) {
 				currentFiber = currentFiber.sibling;
 			}
 		}
-		const fiber = createFiberFromElement(element);
+		let fiber;
+		if (element.type === REACT_FRAGMENT_TYPE) {
+			// 考虑为Fragment情况
+			fiber = createFiberFromFragment(element.props.children, key);
+		} else {
+			fiber = createFiberFromElement(element);
+		}
 		fiber.return = returnFiber;
 		return fiber;
 	}
@@ -123,7 +135,7 @@ function ChildReconciler(shouldTrackEffects: boolean) {
 	function reconcileSingleTextNode(
 		returnFiber: FiberNode,
 		currentFiber: FiberNode | null,
-		content: string | null
+		content: string | number | null
 	) {
 		while (currentFiber !== null) {
 			// 证明在update阶段
@@ -174,7 +186,7 @@ function ChildReconciler(shouldTrackEffects: boolean) {
 		// 多节点diff对比需要支持的操作：插入Placement 删除ChildDeletion 移动Placement
 
 		// 最后一个可复用的fiber在current中的index
-		let lastPlacedIndex: number = 0;
+		let lastPlacedIndex = 0;
 		// 创建的最后一个fiber
 		let lastNewFiber: FiberNode | null = null;
 		// 创建的第一个fiber
@@ -249,11 +261,11 @@ function ChildReconciler(shouldTrackEffects: boolean) {
 	}
 
 	/**
-	 *
-	 * @param returnFiber
-	 * @param existingChildren
-	 * @param index
-	 * @param element
+	 * 从存储的current 子Fiber集合中查找是否有对应可以复用的fiber
+	 * @param returnFiber 父级fiber
+	 * @param existingChildren current 子Fiber集合
+	 * @param index element在同级中对应的index
+	 * @param element element元素
 	 * @returns Fiber
 	 */
 	function updateFromMap(
@@ -282,6 +294,15 @@ function ChildReconciler(shouldTrackEffects: boolean) {
 		if (typeof element === 'object' && element !== null) {
 			switch (element.$$typeof) {
 				case REACT_ELEMENT_TYPE:
+					if (element.type === REACT_FRAGMENT_TYPE) {
+						return updateFragment(
+							returnFiber,
+							before,
+							element,
+							keyToUse,
+							existingChildren
+						);
+					}
 					if (before) {
 						if (before.type === element.type) {
 							// key和type都相同，可以复用fiber，从Map中删除该fiber
@@ -298,6 +319,35 @@ function ChildReconciler(shouldTrackEffects: boolean) {
 				console.warn('还未实现数组类型的child');
 			}
 		}
+
+		if (Array.isArray(element)) {
+			// 数组形式的Fragment,比如
+			// arr = [<li>c</li>, <li>d</li>]
+			// <ul>
+			// <li>a</li>
+			// <li>b</li>
+			// {arr}
+			// </ul>
+			// 转化结果为：
+			// jsx('ul', {
+			// 	children: [
+			// 		jsx('li', {
+			// 			children: 'a'
+			// 		}),
+			// 		jsx('li', {
+			// 			children: 'b'
+			// 		}),
+			// 		arr
+			// 	]
+			// });
+			return updateFragment(
+				returnFiber,
+				before,
+				element,
+				keyToUse,
+				existingChildren
+			);
+		}
 		return null;
 	}
 
@@ -311,14 +361,29 @@ function ChildReconciler(shouldTrackEffects: boolean) {
 	return function reconcileChildFibers(
 		returnFiber: FiberNode,
 		currentFiber: FiberNode | null,
-		newChild?: ReactElementType
+		newChild?: any
 	) {
+		// 判断Fragment
+		const isUnkeyedTopLevelFragment =
+			typeof newChild === 'object' &&
+			newChild !== null &&
+			newChild.type === REACT_FRAGMENT_TYPE &&
+			newChild.key === null;
+		if (isUnkeyedTopLevelFragment) {
+			newChild = newChild.props.children;
+		}
 		// 判断当前fiber的类型
 		if (typeof newChild === 'object' && newChild !== null) {
 			//单节点/多节点是指【更新后是单节点/多节点】，以更新后的为准
+
+			// 多节点diff对比 ul> li*3
+			if (Array.isArray(newChild)) {
+				return reconcileChildrenArray(returnFiber, currentFiber, newChild);
+			}
+
+			// 单节点diff对比
 			switch (newChild.$$typeof) {
 				case REACT_ELEMENT_TYPE:
-					// 单节点diff对比
 					return placeSingleChild(
 						reconcileSingleElement(returnFiber, currentFiber, newChild)
 					);
@@ -327,10 +392,6 @@ function ChildReconciler(shouldTrackEffects: boolean) {
 						console.warn('未实现的reconcile类型', newChild);
 					}
 					break;
-			}
-			// 多节点diff对比 ul> li*3
-			if (Array.isArray(newChild)) {
-				return reconcileChildrenArray(returnFiber, currentFiber, newChild);
 			}
 		}
 
@@ -343,7 +404,7 @@ function ChildReconciler(shouldTrackEffects: boolean) {
 
 		if (currentFiber !== null) {
 			// 兜底删除
-			deleteChild(returnFiber, currentFiber);
+			deleteRemainingChildren(returnFiber, currentFiber);
 		}
 
 		if (__DEV__) {
@@ -364,6 +425,33 @@ function useFiber(fiber: FiberNode, pendingProps: Props): FiberNode {
 	clone.index = 0;
 	clone.sibling = null;
 	return clone;
+}
+
+/**
+ * 更新基于Fragment创建的fiber
+ * @param returnFiber
+ * @param current
+ * @param elements
+ * @param key
+ * @param existingChildren
+ * @returns
+ */
+function updateFragment(
+	returnFiber: FiberNode,
+	current: FiberNode | undefined,
+	elements: any[],
+	key: Key,
+	existingChildren: ExistingChildren
+) {
+	let fiber;
+	if (!current || current.tag !== Fragment) {
+		fiber = createFiberFromFragment(elements, key);
+	} else {
+		existingChildren.delete(key);
+		fiber = useFiber(current, elements);
+	}
+	fiber.return = returnFiber;
+	return fiber;
 }
 
 // 更新时使用

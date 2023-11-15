@@ -1,10 +1,7 @@
 export type Ref = any;
 export type ElementType = any;
-export type Key = string | null;
-export type Props = {
-	[key: string]: any;
-	children?: ReactElementType;
-};
+export type Key = any;
+export type Props = any;
 
 export interface ReactElementType {
 	$$typeof: symbol | number;
