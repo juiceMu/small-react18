@@ -260,6 +260,15 @@ function ChildReconciler(shouldTrackEffects: boolean) {
 		return firstNewFiber;
 	}
 
+	function getElementKeyToUse(element: any, index?: number): Key {
+		if (Array.isArray(element)) {
+			// 考虑fragment array的情况
+			return index;
+		}
+		// 如果存在key，则用key，否则用index作为key
+		return element.key !== null ? element.key : index;
+	}
+
 	/**
 	 * 从存储的current 子Fiber集合中查找是否有对应可以复用的fiber
 	 * @param returnFiber 父级fiber
@@ -274,8 +283,7 @@ function ChildReconciler(shouldTrackEffects: boolean) {
 		index: number,
 		element: any
 	): FiberNode | null {
-		// 如果存在key，则用key，否则用index作为key
-		const keyToUse = element.key !== null ? element.key : index;
+		const keyToUse = getElementKeyToUse(element, index);
 		// 从current的子fiber集合中寻找是否有相同key的fiber
 		const before = existingChildren.get(keyToUse);
 		// HostText
@@ -312,11 +320,6 @@ function ChildReconciler(shouldTrackEffects: boolean) {
 					}
 					// 无法复用，创建新fiber
 					return createFiberFromElement(element);
-			}
-
-			// TODO 数组类型
-			if (Array.isArray(element) && __DEV__) {
-				console.warn('还未实现数组类型的child');
 			}
 		}
 
