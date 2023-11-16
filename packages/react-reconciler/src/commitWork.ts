@@ -52,7 +52,7 @@ export const commitMutationEffects = (
 		} else {
 			// 向上遍历
 			up: while (nextEffect !== null) {
-				commitMutaitonEffectsOnFiber(nextEffect, root);
+				commitMutationEffectsOnFiber(nextEffect, root);
 				const sibling: FiberNode | null = nextEffect.sibling;
 				if (sibling !== null) {
 					nextEffect = sibling;
@@ -69,7 +69,7 @@ export const commitMutationEffects = (
  * @param finishedWork
  * @param root FiberRoot
  */
-const commitMutaitonEffectsOnFiber = (
+const commitMutationEffectsOnFiber = (
 	finishedWork: FiberNode,
 	root: FiberRootNode
 ) => {
@@ -102,7 +102,8 @@ const commitMutaitonEffectsOnFiber = (
 	}
 
 	if ((flags & PassiveEffect) !== NoFlags) {
-		// 收集回调
+		// 存在useEffect
+		// 收集effect回调
 		commitPassiveEffect(finishedWork, root, 'update');
 		// 去掉已触发effect回调的标识
 		finishedWork.flags &= ~PassiveEffect;
@@ -125,6 +126,7 @@ function commitPassiveEffect(
 		fiber.tag !== FunctionComponent ||
 		(type === 'update' && (fiber.flags & PassiveEffect) === NoFlags)
 	) {
+		// 如果不是函数组件 || 不存在useEffect
 		return;
 	}
 	const updateQueue = fiber.updateQueue as FCUpdateQueue<any>;
@@ -140,7 +142,7 @@ function commitPassiveEffect(
 
 /**
  * 执行需要触发的effect hook的回调列表
- * @param flags 类型标记
+ * @param flags effect hook类型标记（比如useEffect）
  * @param lastEffect effect hook链表的最末端节点
  * @param callback 对effect对象执行的函数
  */
@@ -151,6 +153,7 @@ function commitHookEffectList(
 ) {
 	let effect = lastEffect.next as Effect;
 	do {
+		// effect是否为本次需要执行的effect hook类型
 		if ((effect.tag & flags) === flags) {
 			callback(effect);
 		}
@@ -160,7 +163,7 @@ function commitHookEffectList(
 
 /**
  * 执行需要被触发的effect的卸载回调数组(即函数组件被卸载)
- * @param flags 类型标记
+ * @param flags effect hook类型标记（比如useEffect）
  * @param lastEffect effect hook链表的最末端节点
  */
 export function commitHookEffectListUnmount(flags: Flags, lastEffect: Effect) {
@@ -177,7 +180,7 @@ export function commitHookEffectListUnmount(flags: Flags, lastEffect: Effect) {
 
 /**
  * 执行需要被触发的effect依赖变化时的destroy回调数组(即依赖项变化先执行上一次的destroy，再执行create)
- * @param flags 类型标记
+ * @param flags effect hook类型标记（比如useEffect）
  * @param lastEffect effect hook链表的最末端节点
  */
 export function commitHookEffectListDestroy(flags: Flags, lastEffect: Effect) {
@@ -191,7 +194,7 @@ export function commitHookEffectListDestroy(flags: Flags, lastEffect: Effect) {
 
 /**
  * 执行需要被触发的effect依赖变化时的create回调数组
- * @param flags 类型标记
+ * @param flags effect hook类型标记（比如useEffect）
  * @param lastEffect effect hook链表的最末端节点
  */
 export function commitHookEffectListCreate(flags: Flags, lastEffect: Effect) {

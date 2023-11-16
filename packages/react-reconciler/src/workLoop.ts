@@ -37,7 +37,7 @@ let workInProgress: FiberNode | null = null;
 // 当前本次更新的优先级
 let wipRootRenderLane: Lane = NoLane;
 // 正在处理需要被触发的effect hook
-let rootDoesHasPassiveEffects: boolean = false;
+let rootDoesHasPassiveEffects = false;
 
 // 用于执行初始化的操作
 function prepareFreshStack(root: FiberRootNode, lane: Lane) {
@@ -181,14 +181,18 @@ function commitRoot(root: FiberRootNode) {
 
 	// 将执行完毕的lane从root中去掉
 	markRootFinished(root, lane);
+
 	if (
 		(finishedWork.flags & PassiveMask) !== NoFlags ||
 		(finishedWork.subtreeFlags & PassiveMask) !== NoFlags
 	) {
+		// 代表存在函数组件需要执行uesEffect回调
 		if (!rootDoesHasPassiveEffects) {
+			// 开启全局锁，阻止执行多次调度
 			rootDoesHasPassiveEffects = true;
 			// 调度副作用
 			scheduleCallback(NormalPriority, () => {
+				// 用NormalPriority的优先级调度一个异步函数(可以理解为在setTimeout中执行回调)
 				// 执行副作用
 				flushPassiveEffects(root.pendingPassiveEffects);
 				return;
@@ -213,8 +217,6 @@ function commitRoot(root: FiberRootNode) {
 		root.current = finishedWork;
 	}
 	rootDoesHasPassiveEffects = false;
-	// 因为effect hook中也可能包含如useState等引发新一轮更新的操作
-	// 所以执行完所有effect后，需要重新执行一次调度，重新根据优先级安排执行更新任务顺序
 	ensureRootIsScheduled(root);
 }
 
@@ -227,6 +229,7 @@ function flushPassiveEffects(pendingPassiveEffects: PendingPassiveEffects) {
 	// 1.首先触发所有unmount effect，且对于某个fiber，如果触发了unmount destroy，本次更新不会再触发update create
 	// 2.触发所有上次更新的destroy
 	// 3.触发所有这次更新的create
+
 	pendingPassiveEffects.unmount.forEach((effect) => {
 		commitHookEffectListUnmount(Passive, effect);
 	});
@@ -239,6 +242,8 @@ function flushPassiveEffects(pendingPassiveEffects: PendingPassiveEffects) {
 		commitHookEffectListCreate(Passive | HookHasEffect, effect);
 	});
 	pendingPassiveEffects.update = [];
+	// 因为effect hook中也可能包含如useState等引发新一轮更新的操作
+	// 所以执行完所有effect后，需要flushSyncCallbacks，去处理回调过程触发的一些新的更新流程
 	flushSyncCallbacks();
 }
 

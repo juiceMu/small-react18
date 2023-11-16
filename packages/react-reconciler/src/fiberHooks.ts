@@ -115,7 +115,7 @@ function mountEffect(create: EffectCallback | void, deps: EffectDeps | void) {
 	// mount时：一定标记PassiveEffect
 	// update时：deps变化时标记PassiveEffect
 	(currentlyRenderingFiber as FiberNode).flags |= PassiveEffect;
-
+	// effect的hook对象的memoizedState存储的是effect对象
 	hook.memoizedState = pushEffect(
 		Passive | HookHasEffect,
 		create,
@@ -183,7 +183,7 @@ function areHookInputsEqual(nextDeps: EffectDeps, prevDeps: EffectDeps) {
 
 /**
  * 新生成一个effect对象并放入该fiber的effect链表的最末端
- * @param hookFlags hook标识
+ * @param hookFlags hook flag标识
  * @param create create 处理Effect的函数
  * @param destroy create函数返回的destroy函数
  * @param deps 依赖项 触发create函数执行的依赖项
@@ -232,6 +232,7 @@ function pushEffect(
 
 /**
  * 创建函数组件的更新对象队列
+ * （只针对函数组件的fiber新增updateQueue的lastEffect字段）
  * @returns
  */
 function createFCUpdateQueue<State>() {
