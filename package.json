@@ -24,6 +24,7 @@
 		"@rollup/plugin-replace": "^5.0.5",
 		"@types/react": "^18.0.24",
 		"@types/react-dom": "^18.0.8",
+		"@types/scheduler": "^0.16.6",
 		"@typescript-eslint/eslint-plugin": "^6.10.0",
 		"@typescript-eslint/parser": "^6.10.0",
 		"@vitejs/plugin-react": "^2.2.0",
@@ -45,6 +46,7 @@
 		"vite": "^3.2.3"
 	},
 	"dependencies": {
-		"@rollup/plugin-replace": "^5.0.5"
+		"@rollup/plugin-replace": "^5.0.5",
+		"scheduler": "^0.23.0"
 	}
 }

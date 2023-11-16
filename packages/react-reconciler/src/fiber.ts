@@ -8,6 +8,7 @@ import {
 import { Flags, NoFlags } from './fiberFlags';
 import { Container } from 'hostConfig';
 import { Lane, Lanes, NoLane, NoLanes } from './fiberLanes';
+import { Effect } from './fiberHooks';
 
 export class FiberNode {
 	type: any;
@@ -46,7 +47,7 @@ export class FiberNode {
 		// 工作单元属性
 		this.pendingProps = pendingProps; // 刚开始准备工作时的prop值
 		this.memoizedProps = null; // 工作结束后的prop值，也就是确定下来的prop值
-		this.memoizedState = null;
+		this.memoizedState = null; // 对于函数组件的fiber，这里存储的是该函数组件hooks链表
 		this.updateQueue = null;
 		this.alternate = null;
 
@@ -57,12 +58,18 @@ export class FiberNode {
 	}
 }
 
+export interface PendingPassiveEffects {
+	unmount: Effect[];
+	update: Effect[];
+}
+
 export class FiberRootNode {
 	container: Container; // 根元素DOM element
 	current: FiberNode;
 	finishedWork: FiberNode | null; // 更新完成后的rootFiber，这里就是hostRootFiber
 	pendingLanes: Lanes;
 	finishedLane: Lane;
+	pendingPassiveEffects: PendingPassiveEffects;
 	constructor(container: Container, hostRootFiber: FiberNode) {
 		this.container = container;
 		this.current = hostRootFiber;
@@ -70,6 +77,11 @@ export class FiberRootNode {
 		this.finishedWork = null;
 		this.pendingLanes = NoLanes; // 所有未被执行/消费的lane的集合
 		this.finishedLane = NoLane; //  本次执行/消费的lane
+		this.pendingPassiveEffects = {
+			// 所有待执行的effect hooks集合
+			unmount: [], // 卸载触发回调集合
+			update: [] // 更新触发回调集合
+		};
 	}
 }
 
