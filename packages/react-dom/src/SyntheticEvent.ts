@@ -1,4 +1,10 @@
 import { Container } from 'hostConfig';
+import {
+	unstable_ImmediatePriority,
+	unstable_NormalPriority,
+	unstable_runWithPriority,
+	unstable_UserBlockingPriority
+} from 'scheduler';
 import { Props } from 'shared/ReactTypes';
 
 export const elementPropsKey = '__props';
@@ -107,7 +113,10 @@ function dispatchEvent(container: Container, eventType: string, e: Event) {
 function triggerEventFlow(paths: EventCallback[], se: SyntheticEvent) {
 	for (let i = 0; i < paths.length; i++) {
 		const callback = paths[i];
-		callback.call(null, se);
+		// 可以赋予不同优先级给「触发更新的上下文环境」里的优先级
+		unstable_runWithPriority(eventTypeToSchedulerPriority(se.type), () => {
+			callback.call(null, se);
+		});
 
 		if (se.__stopPropagation) {
 			// 停止冒泡，则不继续执行
@@ -171,4 +180,22 @@ function collectPaths(
 		targetElement = targetElement.parentNode as DOMElement;
 	}
 	return paths;
+}
+
+/**
+ * 根据事件类型安排不同调度优先级
+ * @param eventType 事件类型
+ * @returns
+ */
+function eventTypeToSchedulerPriority(eventType: string) {
+	switch (eventType) {
+		case 'click':
+		case 'keydown':
+		case 'keyup':
+			return unstable_ImmediatePriority;
+		case 'scroll':
+			return unstable_UserBlockingPriority;
+		default:
+			return unstable_NormalPriority;
+	}
 }

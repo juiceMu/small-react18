@@ -12,6 +12,7 @@ import {
 	createUpdateQueue,
 	enqueueUpdate,
 	processUpdateQueue,
+	Update,
 	UpdateQueue
 } from './updateQueue';
 import { scheduleUpdateOnFiber } from './workLoop';
@@ -30,9 +31,11 @@ let renderLane: Lane = NoLane;
 const { currentDispatcher } = internals;
 
 interface Hook {
-	memoizedState: any; // hook自身的状态值
+	memoizedState: any; // hook自身的状态值,上次更新计算的最终state
 	updateQueue: unknown;
 	next: Hook | null; // 指向下一个hook
+	baseState: any; // 最后一个没被跳过的update计算后的结果
+	baseQueue: Update<any> | null; // 保存上次更新计算中被跳过的update及其后面的所有update,且参与下次state计算
 }
 
 // effect 对象
@@ -252,15 +255,36 @@ function updateState<State>(): [State, Dispatch<State>] {
 
 	// 计算新state的逻辑
 	const queue = hook.updateQueue as UpdateQueue<State>;
+	const baseState = hook.baseState;
 	const pending = queue.shared.pending;
-	queue.shared.pending = null;
+	const current = currentHook as Hook;
+	let baseQueue = current.baseQueue;
 	if (pending !== null) {
-		const { memoizedState } = processUpdateQueue(
-			hook.memoizedState,
-			pending,
-			renderLane
-		);
-		hook.memoizedState = memoizedState;
+		// 将pending 和baseQueue update 保存在current中
+		// 原因：只要不进入commit阶段，current与wip不会互换，所以保存在current中，即使多次执行render阶段，只要不进入commit阶段，都能从current中恢复数据。
+		if (baseQueue !== null) {
+			// 将pending 和baseQueue 首尾连接组合成一条环形链表
+			const baseFirst = baseQueue.next;
+			const pendingFirst = pending.next;
+			baseQueue.next = pendingFirst;
+			pending.next = baseFirst;
+		}
+		baseQueue = pending;
+		// 保存在current中
+		current.baseQueue = pending;
+		// 重置pending
+		queue.shared.pending = null;
+		if (baseQueue !== null) {
+			// 证明有需要执行的update
+			const {
+				memoizedState,
+				baseQueue: newBaseQueue,
+				baseState: newBaseState
+			} = processUpdateQueue(baseState, baseQueue, renderLane);
+			hook.memoizedState = memoizedState;
+			hook.baseState = newBaseState;
+			hook.baseQueue = newBaseQueue;
+		}
 	}
 	return [hook.memoizedState, queue.dispatch as Dispatch<State>];
 }
@@ -299,7 +323,9 @@ function updateWorkInProgressHook(): Hook {
 	const newHook: Hook = {
 		memoizedState: currentHook.memoizedState,
 		updateQueue: currentHook.updateQueue,
-		next: null
+		next: null,
+		baseQueue: currentHook.baseQueue,
+		baseState: currentHook.baseState
 	};
 
 	if (workInProgressHook === null) {
@@ -370,7 +396,9 @@ function mountWorkInProgressHook(): Hook {
 	const hook: Hook = {
 		memoizedState: null, //usesSate的hook对象存放的是state， effect的hook对象中存放的是effect对象
 		updateQueue: null,
-		next: null
+		next: null,
+		baseQueue: null,
+		baseState: null
 	};
 	if (workInProgressHook === null) {
 		// mount时 第一个hook
