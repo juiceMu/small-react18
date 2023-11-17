@@ -12,8 +12,10 @@ import {
 	HostText,
 	HostComponent,
 	FunctionComponent,
-	Fragment
+	Fragment,
+	ContextProvider
 } from './workTags';
+import { popProvider } from './fiberContext';
 
 /**
  * 对fiber增加Ref标记
@@ -82,6 +84,11 @@ export const completeWork = (wip: FiberNode) => {
 		case HostRoot:
 		case FunctionComponent:
 		case Fragment:
+			bubbleProperties(wip);
+			return null;
+		case ContextProvider:
+			const context = wip.type._context;
+			popProvider(context);
 			bubbleProperties(wip);
 			return null;
 		default:

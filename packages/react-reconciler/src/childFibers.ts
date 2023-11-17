@@ -261,7 +261,13 @@ function ChildReconciler(shouldTrackEffects: boolean) {
 	}
 
 	function getElementKeyToUse(element: any, index?: number): Key {
-		if (Array.isArray(element)) {
+		if (
+			Array.isArray(element) ||
+			typeof element === 'string' ||
+			typeof element === 'number' ||
+			element === undefined ||
+			element === null
+		) {
 			// 考虑fragment array的情况
 			return index;
 		}
