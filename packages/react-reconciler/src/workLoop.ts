@@ -106,12 +106,16 @@ function ensureRootIsScheduled(root: FiberRootNode) {
 		unstable_cancelCallback(existingCallback);
 	}
 
+	if (__DEV__) {
+		console.log(
+			`在${updateLane === SyncLane ? '微' : '宏'}任务中调度，优先级：`,
+			updateLane
+		);
+	}
+
 	let newCallbackNode = null;
 	if (updateLane === SyncLane) {
 		// 同步优先级 用微任务调度
-		if (__DEV__) {
-			console.log('在微任务中调度，优先级：', updateLane);
-		}
 		// 将同步渲染任务放入队列
 		// @ts-ignore
 		scheduleSyncCallback(performSyncWorkOnRoot.bind(null, root, updateLane));

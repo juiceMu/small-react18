@@ -1,6 +1,6 @@
-import { useState } from 'react';
 import { Dispatch } from 'react/src/currentDispatcher';
 import { Dispatcher } from 'react/src/currentDispatcher';
+import currentBatchConfig from 'react/src/currentBatchConfig';
 import internals from 'shared/internals';
 import { Action } from 'shared/ReactTypes';
 import { FiberNode } from './fiber';
@@ -96,13 +96,15 @@ export function renderWithHooks(wip: FiberNode, lane: Lane) {
 // 首次挂载时，hooks集合
 const HooksDispatcherOnMount: Dispatcher = {
 	useState: mountState,
-	useEffect: mountEffect
+	useEffect: mountEffect,
+	useTransition: mountTransition
 };
 
 // 更新时，hooks集合
 const HooksDispatcherOnUpdate: Dispatcher = {
 	useState: updateState,
-	useEffect: updateEffect
+	useEffect: updateEffect,
+	useTransition: updateTransition
 };
 
 /**
@@ -274,17 +276,17 @@ function updateState<State>(): [State, Dispatch<State>] {
 		current.baseQueue = pending;
 		// 重置pending
 		queue.shared.pending = null;
-		if (baseQueue !== null) {
-			// 证明有需要执行的update
-			const {
-				memoizedState,
-				baseQueue: newBaseQueue,
-				baseState: newBaseState
-			} = processUpdateQueue(baseState, baseQueue, renderLane);
-			hook.memoizedState = memoizedState;
-			hook.baseState = newBaseState;
-			hook.baseQueue = newBaseQueue;
-		}
+	}
+	if (baseQueue !== null) {
+		// 证明有需要执行的update
+		const {
+			memoizedState,
+			baseQueue: newBaseQueue,
+			baseState: newBaseState
+		} = processUpdateQueue(baseState, baseQueue, renderLane);
+		hook.memoizedState = memoizedState;
+		hook.baseState = newBaseState;
+		hook.baseQueue = newBaseQueue;
 	}
 	return [hook.memoizedState, queue.dispatch as Dispatch<State>];
 }
@@ -363,10 +365,53 @@ function mountState<State>(
 	const queue = createUpdateQueue<State>();
 	hook.updateQueue = queue;
 	hook.memoizedState = memoizedState;
+	hook.baseState = memoizedState;
 	// @ts-ignore
 	const dispatch = dispatchSetState.bind(null, currentlyRenderingFiber, queue);
 	queue.dispatch = dispatch;
 	return [memoizedState, dispatch];
+}
+
+/**
+ * 首次挂载时，对应的useTransition hook函数
+ * @returns [isPending, startTransition] [是否存在待处理的 transition,使用此方法将状态更新标记为 transition]
+ */
+function mountTransition(): [boolean, (callback: () => void) => void] {
+	const [isPending, setPending] = mountState(false);
+	const hook = mountWorkInProgressHook();
+	const start = startTransition.bind(null, setPending);
+	hook.memoizedState = start;
+	return [isPending, start];
+}
+
+/**
+ * update时，对应的useTransition hook函数
+ * @returns [isPending, startTransition] [是否存在待处理的 transition,使用此方法将状态更新标记为 transition]
+ */
+function updateTransition(): [boolean, (callback: () => void) => void] {
+	const [isPending] = updateState();
+	const hook = updateWorkInProgressHook();
+	const start = hook.memoizedState;
+	return [isPending as boolean, start];
+}
+
+/**
+ * 将状态更新标记为transition
+ * @param setPending 设置表示是否存在待处理的 transition的函数
+ * @param callback
+ */
+function startTransition(setPending: Dispatch<boolean>, callback: () => void) {
+	// 设置当前正在开启过渡
+	setPending(true);
+	// 获取上一次transition值
+	const prevTransition = currentBatchConfig.transition;
+	currentBatchConfig.transition = 1;
+	// 执行传入的callback
+	callback();
+	// 执行完成，将isPending设置为false
+	setPending(false);
+	// 将transition值恢复到上一次的值
+	currentBatchConfig.transition = prevTransition;
 }
 
 /**
