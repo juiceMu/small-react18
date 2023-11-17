@@ -11,6 +11,7 @@ import {
 	HostRoot,
 	HostText
 } from './workTags';
+import { Ref } from './fiberFlags';
 
 /**
  * 开始根据新的虚拟DOM构建新的Fiber树
@@ -96,6 +97,7 @@ function updateHostComponent(wip: FiberNode) {
 	const nextProps = wip.pendingProps;
 	// 获取子element
 	const nextChildren = nextProps.children;
+	markRef(wip.alternate, wip);
 	reconcileChildren(wip, nextChildren);
 	return wip.child;
 }
@@ -114,5 +116,21 @@ function reconcileChildren(wip: FiberNode, children?: ReactElementType) {
 	} else {
 		// mount
 		wip.child = mountChildFibers(wip, null, children);
+	}
+}
+
+/**
+ * 对fiber增加Ref标识
+ * @param current
+ * @param workInProgress
+ */
+function markRef(current: FiberNode | null, workInProgress: FiberNode) {
+	const ref = workInProgress.ref;
+
+	if (
+		(current === null && ref !== null) ||
+		(current !== null && current.ref !== ref)
+	) {
+		workInProgress.flags |= Ref;
 	}
 }

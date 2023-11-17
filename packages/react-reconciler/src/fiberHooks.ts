@@ -97,14 +97,16 @@ export function renderWithHooks(wip: FiberNode, lane: Lane) {
 const HooksDispatcherOnMount: Dispatcher = {
 	useState: mountState,
 	useEffect: mountEffect,
-	useTransition: mountTransition
+	useTransition: mountTransition,
+	useRef: mountRef
 };
 
 // 更新时，hooks集合
 const HooksDispatcherOnUpdate: Dispatcher = {
 	useState: updateState,
 	useEffect: updateEffect,
-	useTransition: updateTransition
+	useTransition: updateTransition,
+	useRef: updateRef
 };
 
 /**
@@ -184,6 +186,28 @@ function areHookInputsEqual(nextDeps: EffectDeps, prevDeps: EffectDeps) {
 		return false;
 	}
 	return true;
+}
+
+/**
+ * mount阶段 useRef hook
+ * @param initialValue
+ * @returns
+ */
+function mountRef<T>(initialValue: T): { current: T } {
+	const hook = mountWorkInProgressHook();
+	const ref = { current: initialValue };
+	hook.memoizedState = ref;
+	return ref;
+}
+
+/**
+ * update阶段 useRef hook
+ * @param initialValue
+ * @returns
+ */
+function updateRef<T>(initialValue: T): { current: T } {
+	const hook = updateWorkInProgressHook();
+	return hook.memoizedState;
 }
 
 /**

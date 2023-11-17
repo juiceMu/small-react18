@@ -17,7 +17,7 @@ export class FiberNode {
 	pendingProps: Props;
 	key: Key;
 	stateNode: any;
-	ref: Ref;
+	ref: Ref | null;
 	return: FiberNode | null;
 	sibling: FiberNode | null;
 	child: FiberNode | null;
@@ -78,10 +78,10 @@ export class FiberRootNode {
 		this.current = hostRootFiber;
 		hostRootFiber.stateNode = this;
 		this.finishedWork = null;
-		this.pendingLanes = NoLanes; // 所有未被执行/消费的lane的集合
-		this.finishedLane = NoLane; //  本次执行/消费的lane
-		this.callbackNode = null; // scheduler 的scheduleCallback执行后会返回一个callbackNode
-		this.callbackPriority = NoLane; // callbackNode的回调优先级
+		this.pendingLanes = NoLanes; // 所有未被执行的lane的集合
+		this.finishedLane = NoLane; //  本次更新执行的lane
+		this.callbackNode = null; // scheduler 的scheduleCallback执行后会返回一个调度的回调函数
+		this.callbackPriority = NoLane; // 调度的回调函数优先级
 
 		this.pendingPassiveEffects = {
 			// 所有待执行的effect hooks集合
@@ -121,6 +121,7 @@ export const createWorkInProgress = (
 	wip.child = current.child;
 	wip.memoizedProps = current.memoizedProps;
 	wip.memoizedState = current.memoizedState;
+	wip.ref = current.ref;
 	return wip;
 };
 
@@ -130,7 +131,7 @@ export const createWorkInProgress = (
  * @returns {FiberNode} 新创建的Fiber
  */
 export function createFiberFromElement(element: ReactElementType): FiberNode {
-	const { type, key, props } = element;
+	const { type, key, props, ref } = element;
 	let fiberTag: WorkTag = FunctionComponent;
 
 	if (typeof type === 'string') {
@@ -141,6 +142,7 @@ export function createFiberFromElement(element: ReactElementType): FiberNode {
 	}
 	const fiber = new FiberNode(fiberTag, props, key);
 	fiber.type = type;
+	fiber.ref = ref;
 	return fiber;
 }
 
