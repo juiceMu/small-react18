@@ -2,7 +2,7 @@ import { Dispatch } from 'react/src/currentDispatcher';
 import { Dispatcher } from 'react/src/currentDispatcher';
 import currentBatchConfig from 'react/src/currentBatchConfig';
 import internals from 'shared/internals';
-import { Action, ReactContext } from 'shared/ReactTypes';
+import { Action, ReactContext, Thenable, Usable } from 'shared/ReactTypes';
 import { FiberNode } from './fiber';
 import { Flags, PassiveEffect } from './fiberFlags';
 import { Lane, NoLane, requestUpdateLane } from './fiberLanes';
@@ -16,6 +16,8 @@ import {
 	UpdateQueue
 } from './updateQueue';
 import { scheduleUpdateOnFiber } from './workLoop';
+import { trackUsedThenable } from './thenable';
+import { REACT_CONTEXT_TYPE } from 'shared/ReactSymbols';
 
 // 当前正在render的Fiber，在fiber中保存hook数据
 let currentlyRenderingFiber: FiberNode | null = null;
@@ -99,7 +101,8 @@ const HooksDispatcherOnMount: Dispatcher = {
 	useEffect: mountEffect,
 	useTransition: mountTransition,
 	useRef: mountRef,
-	useContext: readContext
+	useContext: readContext,
+	use
 };
 
 // 更新时，hooks集合
@@ -108,7 +111,8 @@ const HooksDispatcherOnUpdate: Dispatcher = {
 	useEffect: updateEffect,
 	useTransition: updateTransition,
 	useRef: updateRef,
-	useContext: readContext
+	useContext: readContext,
+	use
 };
 
 /**
@@ -326,10 +330,10 @@ function updateWorkInProgressHook(): Hook {
 	let nextCurrentHook: Hook | null;
 	if (currentHook === null) {
 		// 函数组件更新时的第一个hook
-		const current = currentlyRenderingFiber?.alternate;
+		const current = (currentlyRenderingFiber as FiberNode).alternate;
 		if (current !== null) {
 			// 从current Fiber上获取到存储的hooks数据
-			nextCurrentHook = current?.memoizedState;
+			nextCurrentHook = current.memoizedState;
 		} else {
 			// mount
 			nextCurrentHook = null;
@@ -344,7 +348,7 @@ function updateWorkInProgressHook(): Hook {
 		// mount/update u1 u2 u3
 		// update       u1 u2 u3 u4
 		throw new Error(
-			`组件${currentlyRenderingFiber?.type}本次执行时的Hook比上次执行时多`
+			`组件 ${currentlyRenderingFiber?.type.name} 本次执行时的Hook比上次执行时多`
 		);
 	}
 	currentHook = nextCurrentHook as Hook;
@@ -500,4 +504,27 @@ function readContext<T>(context: ReactContext<T>): T {
 	}
 	const value = context._currentValue;
 	return value;
+}
+
+function use<T>(usable: Usable<T>): T {
+	if (usable !== null && typeof usable === 'object') {
+		if (typeof (usable as Thenable<T>).then === 'function') {
+			const thenable = usable as Thenable<T>;
+			return trackUsedThenable(thenable);
+		} else if ((usable as ReactContext<T>).$$typeof === REACT_CONTEXT_TYPE) {
+			const context = usable as ReactContext<T>;
+			return readContext(context);
+		}
+	}
+	throw new Error('不支持的use参数 ' + usable);
+}
+
+/**
+ * 在unwind流程重置hooks全局变量
+ * @param wip
+ */
+export function resetHooksOnUnwind(wip: FiberNode) {
+	currentlyRenderingFiber = null;
+	currentHook = null;
+	workInProgressHook = null;
 }

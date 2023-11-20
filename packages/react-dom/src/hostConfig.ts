@@ -98,3 +98,38 @@ export const scheduleMicroTask =
 		: typeof Promise === 'function'
 		? (callback: (...args: any) => void) => Promise.resolve(null).then(callback)
 		: setTimeout;
+
+/**
+ * 隐藏DOM实例
+ * @param instance
+ */
+export function hideInstance(instance: Instance) {
+	const style = (instance as HTMLElement).style;
+	style.setProperty('display', 'none', 'important');
+}
+
+/**
+ * 不隐藏DOM实例
+ * @param instance
+ */
+export function unhideInstance(instance: Instance) {
+	const style = (instance as HTMLElement).style;
+	style.display = '';
+}
+
+/**
+ * 隐藏文本DOM实例
+ * @param instance
+ */
+export function hideTextInstance(textInstance: TextInstance) {
+	textInstance.nodeValue = '';
+}
+
+/**
+ * 不隐藏文本DOM实例
+ * @param textInstance
+ * @param text 文本内容
+ */
+export function unhideTextInstance(textInstance: TextInstance, text: string) {
+	textInstance.nodeValue = text;
+}

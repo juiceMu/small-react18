@@ -1,17 +1,19 @@
-import { Props, Key, Ref, ReactElementType } from 'shared/ReactTypes';
+import { Props, Key, Ref, ReactElementType, Wakeable } from 'shared/ReactTypes';
 import {
 	ContextProvider,
 	Fragment,
 	FunctionComponent,
 	HostComponent,
-	WorkTag
+	WorkTag,
+	SuspenseComponent,
+	OffscreenComponent
 } from './workTags';
 import { Flags, NoFlags } from './fiberFlags';
 import { Container } from 'hostConfig';
 import { Lane, Lanes, NoLane, NoLanes } from './fiberLanes';
 import { Effect } from './fiberHooks';
 import { CallbackNode } from 'scheduler';
-import { REACT_PROVIDER_TYPE } from 'shared/ReactSymbols';
+import { REACT_PROVIDER_TYPE, REACT_SUSPENSE_TYPE } from 'shared/ReactSymbols';
 
 export class FiberNode {
 	type: any;
@@ -71,16 +73,21 @@ export class FiberRootNode {
 	current: FiberNode;
 	finishedWork: FiberNode | null; // 更新完成后的rootFiber，这里就是hostRootFiber
 	pendingLanes: Lanes;
+	suspendedLanes: Lanes;
+	pingedLanes: Lanes;
 	finishedLane: Lane;
 	pendingPassiveEffects: PendingPassiveEffects;
 	callbackNode: CallbackNode | null;
 	callbackPriority: Lane;
+	pingCache: WeakMap<Wakeable<any>, Set<Lane>> | null;
 	constructor(container: Container, hostRootFiber: FiberNode) {
 		this.container = container;
 		this.current = hostRootFiber;
 		hostRootFiber.stateNode = this;
 		this.finishedWork = null;
 		this.pendingLanes = NoLanes; // 所有未被执行的lane的集合
+		this.suspendedLanes = NoLanes; // 所有被挂起的lane
+		this.pingedLanes = NoLanes; // 所有被挂起的lane中被ping的lane
 		this.finishedLane = NoLane; //  本次更新执行的lane
 		this.callbackNode = null; // scheduler 的scheduleCallback执行后会返回一个调度的回调函数
 		this.callbackPriority = NoLane; // 调度的回调函数优先级
@@ -90,6 +97,8 @@ export class FiberRootNode {
 			unmount: [], // 卸载触发回调集合
 			update: [] // 更新触发回调集合
 		};
+
+		this.pingCache = null;
 	}
 }
 
@@ -145,6 +154,8 @@ export function createFiberFromElement(element: ReactElementType): FiberNode {
 	) {
 		// <Context.Provider>
 		fiberTag = ContextProvider;
+	} else if (type === REACT_SUSPENSE_TYPE) {
+		fiberTag = SuspenseComponent;
 	} else if (typeof type !== 'function' && __DEV__) {
 		console.warn('为定义的type类型', element);
 	}
@@ -162,5 +173,21 @@ export function createFiberFromElement(element: ReactElementType): FiberNode {
  */
 export function createFiberFromFragment(elements: any[], key: Key): FiberNode {
 	const fiber = new FiberNode(Fragment, elements, key);
+	return fiber;
+}
+
+export interface OffscreenProps {
+	mode: 'visible' | 'hidden';
+	children: any;
+}
+
+/**
+ * 基于Offscreen组件创建fiber（用于Suspense）
+ * @param pendingProps
+ * @returns
+ */
+export function createFiberFromOffscreen(pendingProps: OffscreenProps) {
+	const fiber = new FiberNode(OffscreenComponent, pendingProps, null);
+	// TODO stateNode
 	return fiber;
 }
