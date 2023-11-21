@@ -1,6 +1,5 @@
 import { Dispatch } from 'react/src/currentDispatcher';
 import { Dispatcher } from 'react/src/currentDispatcher';
-import currentBatchConfig from 'react/src/currentBatchConfig';
 import internals from 'shared/internals';
 import { Action, ReactContext, Thenable, Usable } from 'shared/ReactTypes';
 import { FiberNode } from './fiber';
@@ -40,7 +39,7 @@ let currentHook: Hook | null = null;
 // 当前本次更新的优先级
 let renderLane: Lane = NoLane;
 
-const { currentDispatcher } = internals;
+const { currentDispatcher, currentBatchConfig } = internals;
 
 /**
  * 读取context
@@ -522,7 +521,7 @@ function dispatchSetState<State>(
 			return;
 		}
 	}
-	enqueueUpdate(updateQueue, update);
+	enqueueUpdate(updateQueue, update, fiber, lane);
 	scheduleUpdateOnFiber(fiber, lane);
 }
 
