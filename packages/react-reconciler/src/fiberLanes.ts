@@ -152,3 +152,23 @@ export function getNextLane(root: FiberRootNode): Lane {
 	}
 	return nextLane;
 }
+
+/**
+ * 是否包含lanes
+ * @param set
+ * @param subset
+ * @returns
+ */
+export function includeSomeLanes(set: Lanes, subset: Lane | Lanes): boolean {
+	return (set & subset) !== NoLanes;
+}
+
+/**
+ * 去掉lanes合集
+ * @param set
+ * @param subset
+ * @returns
+ */
+export function removeLanes(set: Lanes, subset: Lanes | Lane): Lanes {
+	return set & ~subset;
+}

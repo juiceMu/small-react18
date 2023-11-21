@@ -6,15 +6,25 @@ import {
 	HostComponent,
 	WorkTag,
 	SuspenseComponent,
-	OffscreenComponent
+	OffscreenComponent,
+	MemoComponent
 } from './workTags';
 import { Flags, NoFlags } from './fiberFlags';
 import { Container } from 'hostConfig';
 import { Lane, Lanes, NoLane, NoLanes } from './fiberLanes';
 import { Effect } from './fiberHooks';
 import { CallbackNode } from 'scheduler';
-import { REACT_PROVIDER_TYPE, REACT_SUSPENSE_TYPE } from 'shared/ReactSymbols';
+import {
+	REACT_MEMO_TYPE,
+	REACT_PROVIDER_TYPE,
+	REACT_SUSPENSE_TYPE
+} from 'shared/ReactSymbols';
+import { ContextItem } from './fiberContext';
 
+interface FiberDependencies<Value> {
+	firstContext: ContextItem<Value> | null;
+	lanes: Lanes;
+}
 export class FiberNode {
 	type: any;
 	tag: WorkTag; // 代表fiberNode 是什么类型的节点
@@ -33,6 +43,10 @@ export class FiberNode {
 	subtreeFlags: Flags;
 	updateQueue: unknown;
 	deletions: FiberNode[] | null;
+	lanes: Lanes;
+	childLanes: Lanes;
+
+	dependencies: FiberDependencies<any> | null;
 
 	constructor(tag: WorkTag, pendingProps: Props, key: Key) {
 		// 下面这些是实例属性
@@ -60,6 +74,10 @@ export class FiberNode {
 		this.flags = NoFlags; // 对应操作标记
 		this.subtreeFlags = NoFlags; // 层层叠加的操作标记集合
 		this.deletions = null; // 要被删除的子Fiber合集
+		this.lanes = NoLanes;
+		this.childLanes = NoLanes; // 所有未被执行的lane的集合
+
+		this.dependencies = null; // 依赖的所有context
 	}
 }
 
@@ -133,6 +151,17 @@ export const createWorkInProgress = (
 	wip.memoizedProps = current.memoizedProps;
 	wip.memoizedState = current.memoizedState;
 	wip.ref = current.ref;
+	wip.lanes = current.lanes;
+	wip.childLanes = current.childLanes;
+
+	const currentDeps = current.dependencies;
+	wip.dependencies =
+		currentDeps === null
+			? null
+			: {
+					lanes: currentDeps.lanes,
+					firstContext: currentDeps.firstContext
+			  };
 	return wip;
 };
 
@@ -148,12 +177,18 @@ export function createFiberFromElement(element: ReactElementType): FiberNode {
 	if (typeof type === 'string') {
 		// <div/> type: 'div'
 		fiberTag = HostComponent;
-	} else if (
-		typeof type === 'object' &&
-		type.$$typeof === REACT_PROVIDER_TYPE
-	) {
-		// <Context.Provider>
-		fiberTag = ContextProvider;
+	} else if (typeof type === 'object') {
+		switch (type.$$typeof) {
+			case REACT_PROVIDER_TYPE:
+				fiberTag = ContextProvider;
+				break;
+			case REACT_MEMO_TYPE:
+				fiberTag = MemoComponent;
+				break;
+			default:
+				console.warn('未定义的type类型', element);
+				break;
+		}
 	} else if (type === REACT_SUSPENSE_TYPE) {
 		fiberTag = SuspenseComponent;
 	} else if (typeof type !== 'function' && __DEV__) {

@@ -89,7 +89,7 @@ function prepareFreshStack(root: FiberRootNode, lane: Lane) {
  */
 export function scheduleUpdateOnFiber(fiber: FiberNode, lane: Lane) {
 	// 拿到fiberRootNode
-	const root = markUpdateFromFiberToRoot(fiber);
+	const root = markUpdateLaneFromFiberToRoot(fiber, lane);
 	markRootUpdated(root, lane);
 	ensureRootIsScheduled(root);
 }
@@ -171,12 +171,18 @@ export function markRootUpdated(root: FiberRootNode, lane: Lane) {
 /**
  * 从fiber中递归得到FiberRoot
  * @param fiber
+ * @param lane
  * @returns fiberRootNode
  */
-export function markUpdateFromFiberToRoot(fiber: FiberNode) {
+export function markUpdateLaneFromFiberToRoot(fiber: FiberNode, lane: Lane) {
 	let node = fiber;
 	let parent = node.return;
 	while (parent !== null) {
+		parent.childLanes = mergeLanes(parent.childLanes, lane);
+		const alternate = parent.alternate;
+		if (alternate !== null) {
+			alternate.childLanes = mergeLanes(alternate.childLanes, lane);
+		}
 		// 证明为普通fiber节点，则不断向上递归
 		node = parent;
 		parent = node.return;
@@ -290,6 +296,7 @@ function performSyncWorkOnRoot(root: FiberRootNode) {
 	}
 }
 
+let c = 0; // TODO: 会删除
 /**
  * 开始执行渲染(从根节点开始)
  * @param root
@@ -326,6 +333,13 @@ function renderRoot(root: FiberRootNode, lane: Lane, shouldTimeSlice: boolean) {
 			if (__DEV__) {
 				console.warn('workLoop发生错误', e);
 			}
+			// TODO: 会删除-----------
+			c++;
+			if (c > 20) {
+				break;
+				console.warn('break!');
+			}
+			// TODO: 会删除-----------
 			handleThrow(root, e);
 		}
 	} while (true);

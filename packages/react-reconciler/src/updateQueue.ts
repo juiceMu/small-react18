@@ -1,11 +1,14 @@
 import { Dispatch } from 'react/src/currentDispatcher';
 import { Action } from 'shared/ReactTypes';
-import { isSubsetOfLanes, Lane, NoLane } from './fiberLanes';
+import { isSubsetOfLanes, Lane, mergeLanes, NoLane } from './fiberLanes';
+import { FiberNode } from './fiber';
 
 export interface Update<State> {
 	action: Action<State>;
 	lane: Lane; // 优先级
 	next: Update<any> | null;
+	hasEagerState: boolean;
+	eagerState: State | null;
 }
 
 export interface UpdateQueue<State> {
@@ -19,16 +22,22 @@ export interface UpdateQueue<State> {
  * 创建update实例
  * @param action
  * @param lane 优先级
+ * @param hasEagerState
+ * @param eagerState
  * @returns update实例
  */
 export const createUpdate = <State>(
 	action: Action<State>,
-	lane: Lane
+	lane: Lane,
+	hasEagerState = false,
+	eagerState = null
 ): Update<State> => {
 	return {
 		action,
 		lane,
-		next: null
+		next: null,
+		hasEagerState,
+		eagerState
 	};
 };
 
@@ -49,10 +58,14 @@ export const createUpdateQueue = <State>() => {
  * 往updateQueue内增加update对象
  * @param updateQueue 单个hook的更新队列
  * @param update 新加入的更新对象
+ * @param fiber
+ * @param lane
  */
 export const enqueueUpdate = <State>(
 	updateQueue: UpdateQueue<State>,
-	update: Update<State>
+	update: Update<State>,
+	fiber: FiberNode,
+	lane: Lane
 ) => {
 	const pending = updateQueue.shared.pending;
 	if (pending === null) {
@@ -67,13 +80,38 @@ export const enqueueUpdate = <State>(
 		pending.next = update;
 	}
 	updateQueue.shared.pending = update;
+	fiber.lanes = mergeLanes(fiber.lanes, lane);
+	const alternate = fiber.alternate;
+	if (alternate !== null) {
+		alternate.lanes = mergeLanes(alternate.lanes, lane);
+	}
 };
+
+/**
+ * 计算state
+ * @param state
+ * @param action
+ * @returns
+ */
+export function basicStateReducer<State>(
+	state: State,
+	action: Action<State>
+): State {
+	if (action instanceof Function) {
+		// baseState 1 update (x) => 4x -> memoizedState 4
+		return action(state);
+	} else {
+		// baseState 1 update 2 -> memoizedState 2
+		return action;
+	}
+}
 
 /**
  * 计算状态最新值 消费update
  * @param baseState 初始状态
  * @param pendingUpdate 需要被消费的update
  * @param renderLane 当前本次更新的优先级
+ * @param onSkipUpdate 对跳过的update执行的callback
  * @returns {
  *  baseState: 最后一个没被跳过的update计算后的结果
  *  memoizedState: 上次更新计算的最终state
@@ -83,7 +121,8 @@ export const enqueueUpdate = <State>(
 export const processUpdateQueue = <State>(
 	baseState: State,
 	pendingUpdate: Update<State> | null,
-	renderLane: Lane
+	renderLane: Lane,
+	onSkipUpdate?: <State>(update: Update<State>) => void
 ): {
 	memoizedState: State;
 	baseState: State;
@@ -116,6 +155,8 @@ export const processUpdateQueue = <State>(
 				// 优先级不够，被跳过，即不在本次更新lanes集合中
 				// 本次更新「被跳过的update及其后面的所有update」都会被保存在baseQueue中参与下次state计算
 				const clone = createUpdate(pending.action, pending.lane);
+				// 对跳过的update执行callback
+				onSkipUpdate?.(clone);
 				if (newBaseQueueFirst === null) {
 					// 是第一个被跳过的update
 					newBaseQueueFirst = clone;
@@ -136,12 +177,10 @@ export const processUpdateQueue = <State>(
 				}
 
 				const action = pending.action;
-				if (action instanceof Function) {
-					// baseState 1 update (x) => 4x -> memoizedState 4
-					newState = action(baseState);
+				if (pending.hasEagerState) {
+					newState = pending.eagerState;
 				} else {
-					// baseState 1 update 2 -> memoizedState 2
-					newState = action;
+					newState = basicStateReducer(baseState, action);
 				}
 			}
 			// 遍历下一个update
